@@ -1,0 +1,165 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Book Manager</title>
+  <style>
+    body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; color: #222; }
+    h1 { margin-bottom: 0.5rem; }
+    form, .toolbar { display: flex; flex-wrap: wrap; gap: 0.5rem; margin-bottom: 1rem; }
+    input, select, button { padding: 0.5rem; font-size: 0.95rem; }
+    input { flex: 1; min-width: 150px; }
+    button { cursor: pointer; }
+    table { width: 100%; border-collapse: collapse; }
+    th, td { text-align: left; padding: 0.5rem; border-bottom: 1px solid #ddd; }
+    .error { color: #b00020; }
+  </style>
+</head>
+<body>
+  <h1>Book Manager</h1>
+  <p id="status-line"></p>
+
+  <form id="add-form">
+    <input name="title" placeholder="Title *" required />
+    <input name="author" placeholder="Author *" required />
+    <input name="isbn" placeholder="ISBN" />
+    <input name="genre" placeholder="Genre" />
+    <input name="publishedYear" type="number" placeholder="Year" />
+    <select name="status">
+      <option value="to-read">To read</option>
+      <option value="reading">Reading</option>
+      <option value="finished">Finished</option>
+    </select>
+    <button type="submit">Add book</button>
+  </form>
+
+  <div class="toolbar">
+    <input id="search" placeholder="Search title or author" />
+    <select id="filter">
+      <option value="">All statuses</option>
+      <option value="to-read">To read</option>
+      <option value="reading">Reading</option>
+      <option value="finished">Finished</option>
+    </select>
+    <button id="refresh">Refresh</button>
+  </div>
+
+  <p id="error" class="error"></p>
+
+  <table>
+    <thead>
+      <tr><th>Title</th><th>Author</th><th>Genre</th><th>Year</th><th>Status</th><th></th></tr>
+    </thead>
+    <tbody id="books"></tbody>
+  </table>
+
+  <script>
+    const api = '/api/books';
+    const errorEl = document.getElementById('error');
+
+    function showError(msg) { errorEl.textContent = msg || ''; }
+
+    async function request(url, options = {}) {
+      const res = await fetch(url, {
+        headers: { 'Content-Type': 'application/json' },
+        ...options
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error || 'Request failed');
+      return data;
+    }
+
+    function buildRow(book) {
+      const tr = document.createElement('tr');
+      const cells = [book.title, book.author, book.genre, book.publishedYear || ''];
+      cells.forEach((value) => {
+        const td = document.createElement('td');
+        td.textContent = value;
+        tr.appendChild(td);
+      });
+
+      const statusTd = document.createElement('td');
+      const select = document.createElement('select');
+      ['to-read', 'reading', 'finished'].forEach((s) => {
+        const opt = document.createElement('option');
+        opt.value = s;
+        opt.textContent = s;
+        if (s === book.status) opt.selected = true;
+        select.appendChild(opt);
+      });
+      select.addEventListener('change', () => updateStatus(book._id, select.value));
+      statusTd.appendChild(select);
+      tr.appendChild(statusTd);
+
+      const actionTd = document.createElement('td');
+      const del = document.createElement('button');
+      del.textContent = 'Delete';
+      del.addEventListener('click', () => removeBook(book._id));
+      actionTd.appendChild(del);
+      tr.appendChild(actionTd);
+
+      return tr;
+    }
+
+    async function loadBooks() {
+      try {
+        showError('');
+        const params = new URLSearchParams();
+        const q = document.getElementById('search').value.trim();
+        const status = document.getElementById('filter').value;
+        if (q) params.set('q', q);
+        if (status) params.set('status', status);
+
+        const books = await request(`${api}?${params.toString()}`);
+        const tbody = document.getElementById('books');
+        tbody.replaceChildren(...books.map(buildRow));
+        document.getElementById('status-line').textContent = `${books.length} book(s)`;
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    async function updateStatus(id, status) {
+      try {
+        await request(`${api}/${id}`, { method: 'PUT', body: JSON.stringify({ status }) });
+        loadBooks();
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    async function removeBook(id) {
+      if (!confirm('Delete this book?')) return;
+      try {
+        await request(`${api}/${id}`, { method: 'DELETE' });
+        loadBooks();
+      } catch (err) {
+        showError(err.message);
+      }
+    }
+
+    document.getElementById('add-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      const form = e.target;
+      const payload = Object.fromEntries(new FormData(form).entries());
+      if (!payload.publishedYear) delete payload.publishedYear;
+      if (!payload.isbn) delete payload.isbn;
+      if (!payload.genre) delete payload.genre;
+      try {
+        await request(api, { method: 'POST', body: JSON.stringify(payload) });
+        form.reset();
+        loadBooks();
+      } catch (err) {
+        showError(err.message);
+      }
+    });
+
+    document.getElementById('refresh').addEventListener('click', loadBooks);
+    document.getElementById('search').addEventListener('input', loadBooks);
+    document.getElementById('filter').addEventListener('change', loadBooks);
+
+    loadBooks();
+  </script>
+</body>
+</html>

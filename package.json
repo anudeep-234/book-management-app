@@ -1,0 +1,13 @@
+{
+  "name": "book-management-app",
+  "version": "1.0.0",
+  "description": "Book management application with Express, MongoDB and Docker",
+  "main": "src/server.js",
+  "scripts": {
+    "start": "node src/server.js"
+  },
+  "dependencies": {
+    "express": "^4.21.2",
+    "mongoose": "^8.9.5"
+  }
+}
